@@ -1,0 +1,34 @@
+<svg width="100%" height="100%" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="100" cy="100" r="100" fill="#EBF8FF"/>
+  
+  <!-- Body/Shoulders -->
+  <path d="M50 180C50 150 70 135 100 135C130 135 150 150 150 180H50Z" fill="#2B6CB0"/>
+  <path d="M85 135L100 160L115 135" fill="#E2E8F0" opacity="0.3"/>
+  
+  <!-- Neck -->
+  <rect x="85" y="120" width="30" height="30" fill="#F6AD55"/>
+  
+  <!-- Hair Back -->
+  <path d="M60 60C50 80 45 120 60 140H140C155 120 150 80 140 60C120 20 80 20 60 60Z" fill="#1A202C"/>
+  
+  <!-- Face Shape -->
+  <path d="M65 65C65 65 65 130 100 130C135 130 135 65 135 65C135 40 120 20 100 20C80 20 65 40 65 65Z" fill="#F6AD55"/>
+  
+  <!-- Bangs/Hair Front -->
+  <path d="M135 65C135 45 120 30 100 30C80 30 65 45 65 75C65 55 80 45 100 45C125 45 135 65 135 65Z" fill="#1A202C"/>
+  
+  <!-- Eyes -->
+  <ellipse cx="85" cy="80" rx="4" ry="5" fill="#2D3748"/>
+  <ellipse cx="115" cy="80" rx="4" ry="5" fill="#2D3748"/>
+  
+  <!-- Smile -->
+  <path d="M88 100Q100 110 112 100" stroke="#C53030" stroke-width="2.5" stroke-linecap="round"/>
+  
+  <!-- Flower (Plumeria) -->
+  <g transform="translate(130, 65) rotate(15)">
+    <circle r="12" fill="#FFF5F5"/>
+    <circle r="4" fill="#ECC94B"/>
+    <path d="M0 0L-5 -8M0 0L5 -8M0 0L8 0M0 0L5 8M0 0L-5 8M0 0L-8 0" stroke="#F687B3" stroke-width="1" opacity="0.5"/>
+  </g>
+</svg>

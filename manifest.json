@@ -1,0 +1,15 @@
+{
+  "short_name": "ThaiGuide",
+  "name": "ThaiGuide AI Travel Assistant",
+  "icons": [
+    {
+      "src": "https://fonts.gstatic.com/s/i/materialicons/travel_explore/v10/24px.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0052b4",
+  "background_color": "#f8f7f5"
+}

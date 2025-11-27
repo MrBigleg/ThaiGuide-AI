@@ -1,0 +1,165 @@
+import { GoogleGenAI, Modality, Type } from "@google/genai";
+import { blobToBase64 } from './audioUtils';
+import { Coordinates, GroundingSource } from '../types';
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const SYSTEM_INSTRUCTION = `You are Somsri, a friendly, knowledgeable, and helpful Thai travel guide. 
+Your persona is non-negotiable: you are a virtual guide who loves Thailand, its culture, food, and hidden gems.
+NEVER break character. You are not a generic AI. You are Somsri.
+If asked about your identity, insist you are Somsri, here to show them the beauty of Thailand.
+You can speak any language the user prefers (multi-lingual), but your personality remains a warm, welcoming Thai local.
+Use Thai honorifics like 'ka' (female speaker) occasionally and naturally at the end of sentences, regardless of the language being spoken.
+Keep responses concise, warm, and engaging.
+
+IMPORTANT: If you recommend a specific point of interest, tourist attraction, or restaurant, please include its coordinates at the very end of your response in this exact format: {{latitude,longitude}}. Example: {{13.7563,100.5018}}. Only do this for specific single locations, not broad cities or regions.`;
+
+export interface ChatResponse {
+  text: string;
+  groundingSources?: GroundingSource[];
+  location?: Coordinates;
+}
+
+export const sendMessage = async (
+  message: string, 
+  history: { role: string; parts: { text: string }[] }[],
+  location?: Coordinates
+): Promise<ChatResponse> => {
+  try {
+    const toolConfig: any = {};
+    if (location) {
+      toolConfig.retrievalConfig = {
+        latLng: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        }
+      };
+    }
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        ...history.map(h => ({ role: h.role, parts: h.parts })),
+        { role: 'user', parts: [{ text: message }] }
+      ],
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        tools: [{ googleSearch: {} }, { googleMaps: {} }],
+        toolConfig: toolConfig,
+      }
+    });
+
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    let groundingSources: GroundingSource[] = [];
+
+    if (groundingChunks) {
+      groundingChunks.forEach((chunk: any) => {
+        if (chunk.web?.uri && chunk.web?.title) {
+          groundingSources.push({ title: chunk.web.title, uri: chunk.web.uri });
+        }
+        if (chunk.maps?.uri && chunk.maps?.title) {
+           groundingSources.push({ title: chunk.maps.title || "Google Maps", uri: chunk.maps.uri });
+        }
+      });
+    }
+
+    // De-duplicate
+    groundingSources = groundingSources.filter((v, i, a) => a.findIndex(t => (t.uri === v.uri)) === i);
+
+    let text = response.text || "I'm sorry, I couldn't generate a response.";
+    let parsedLocation: Coordinates | undefined;
+
+    // Parse coordinates from text response
+    const coordRegex = /\{\{([\d.-]+),([\d.-]+)\}\}/;
+    const match = text.match(coordRegex);
+    if (match) {
+      parsedLocation = {
+        latitude: parseFloat(match[1]),
+        longitude: parseFloat(match[2])
+      };
+      text = text.replace(match[0], '').trim();
+    }
+
+    return {
+      text,
+      groundingSources,
+      location: parsedLocation
+    };
+
+  } catch (error) {
+    console.error("Chat error:", error);
+    throw error;
+  }
+};
+
+export const generatePlan = async (prompt: string): Promise<string> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: {
+        systemInstruction: "You are Somsri, an expert Thai travel planner. Create detailed, step-by-step itineraries. Write in a warm, welcoming tone like a local host. Format nicely with Markdown.",
+        thinkingConfig: { thinkingBudget: 16000 },
+      }
+    });
+    return response.text || "Could not generate plan.";
+  } catch (error) {
+    console.error("Plan error:", error);
+    throw error;
+  }
+};
+
+export const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
+  try {
+    const base64Audio = await blobToBase64(audioBlob);
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType: audioBlob.type,
+              data: base64Audio
+            }
+          },
+          { text: "Transcribe this audio exactly as spoken." }
+        ]
+      }
+    });
+    return response.text || "";
+  } catch (error) {
+    console.error("Transcription error:", error);
+    throw error;
+  }
+};
+
+export const generateSpeech = async (text: string): Promise<ArrayBuffer> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-preview-tts',
+      contents: [{ parts: [{ text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("No audio data returned");
+
+    const binaryString = atob(base64Audio);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  } catch (error) {
+    console.error("TTS error:", error);
+    throw error;
+  }
+};

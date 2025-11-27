@@ -1,0 +1,8 @@
+{
+  "name": "ThaiGuide AI",
+  "description": "An intelligent travel assistant for Thailand featuring real-time chat, detailed itinerary planning, and voice conversation capabilities.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}

@@ -1,0 +1,27 @@
+<svg width="100%" height="100%" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Plate -->
+  <circle cx="100" cy="100" r="90" fill="white" stroke="#E2E8F0" stroke-width="4"/>
+  <circle cx="100" cy="100" r="70" fill="#FFFBEB"/>
+  
+  <!-- Noodles -->
+  <path d="M60 100Q80 80 100 100T140 100" stroke="#F6AD55" stroke-width="8" stroke-linecap="round"/>
+  <path d="M50 90Q70 110 90 90T130 90" stroke="#F6AD55" stroke-width="8" stroke-linecap="round"/>
+  <path d="M70 110Q90 90 110 110T150 110" stroke="#F6AD55" stroke-width="8" stroke-linecap="round"/>
+  <path d="M80 80Q100 60 120 80" stroke="#F6AD55" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Shrimp -->
+  <path d="M110 70Q130 50 150 70" stroke="#F56565" stroke-width="12" stroke-linecap="round"/>
+  <path d="M150 70L160 60" stroke="#F56565" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Green Onion -->
+  <path d="M70 70L130 130" stroke="#48BB78" stroke-width="4" stroke-linecap="round"/>
+  <path d="M60 80L120 140" stroke="#48BB78" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Lime -->
+  <path d="M130 140C130 140 150 140 150 120" stroke="#D4F300" stroke-width="15" stroke-linecap="round"/>
+  
+  <!-- Peanuts -->
+  <circle cx="50" cy="120" r="3" fill="#B7791F"/>
+  <circle cx="60" cy="115" r="3" fill="#B7791F"/>
+  <circle cx="55" cy="125" r="3" fill="#B7791F"/>
+</svg>
