@@ -3,19 +3,28 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { generatePlan, transcribeAudio } from '../services/geminiService';
 
+interface Task {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 interface SavedPlan {
   id: string;
   topic: string;
-  content: string;
+  content: string; // The raw markdown
+  tasks: Task[];   // Interactive tasks
   timestamp: number;
 }
 
 export const PlanInterface: React.FC = () => {
   const [topic, setTopic] = useState('');
-  const [plan, setPlan] = useState('');
+  const [planContent, setPlanContent] = useState(''); // Raw AI response
+  const [tasks, setTasks] = useState<Task[]>([]);     // Extracted/User tasks
   const [isThinking, setIsThinking] = useState(false);
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
   const [showSavedList, setShowSavedList] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
 
   // Voice input state
   const [isRecording, setIsRecording] = useState(false);
@@ -38,6 +47,30 @@ export const PlanInterface: React.FC = () => {
   const saveToLocalStorage = (plans: SavedPlan[]) => {
     localStorage.setItem('thai_guide_saved_plans', JSON.stringify(plans));
     setSavedPlans(plans);
+  };
+
+  const parseTasksFromMarkdown = (markdown: string): Task[] => {
+    const lines = markdown.split('\n');
+    const extractedTasks: Task[] = [];
+    
+    // Simple regex to catch bullet points (*, -) or numbered lists (1.)
+    const listRegex = /^(\s*[-*]|\s*\d+\.)\s+(.*)/;
+
+    lines.forEach(line => {
+      const match = line.match(listRegex);
+      if (match) {
+        // Clean up bolding/italics for the task view
+        const cleanText = match[2].replace(/\*\*/g, '').replace(/\*/g, '').trim();
+        if (cleanText.length > 0) {
+          extractedTasks.push({
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            text: cleanText,
+            completed: false
+          });
+        }
+      }
+    });
+    return extractedTasks;
   };
 
   const startRecording = async () => {
@@ -80,25 +113,65 @@ export const PlanInterface: React.FC = () => {
   const handleGenerate = async () => {
     if (!topic.trim()) return;
     setIsThinking(true);
-    setPlan('');
+    setPlanContent('');
+    setTasks([]);
     setShowSavedList(false);
     try {
       const result = await generatePlan(`Create a detailed itinerary or plan for: ${topic}`);
-      setPlan(result);
+      setPlanContent(result);
+      const extracted = parseTasksFromMarkdown(result);
+      setTasks(extracted);
     } catch (e) {
-      setPlan("Sorry, I couldn't generate the plan right now.");
+      setPlanContent("Sorry, I couldn't generate the plan right now.");
     } finally {
       setIsThinking(false);
     }
   };
 
+  // --- Task Management Functions ---
+
+  const handleAddTask = () => {
+    if (!newTaskText.trim()) return;
+    const newTask: Task = {
+      id: Date.now().toString(),
+      text: newTaskText,
+      completed: false
+    };
+    setTasks([...tasks, newTask]);
+    setNewTaskText('');
+  };
+
+  const handleToggleTask = (id: string) => {
+    setTasks(tasks.map(t => 
+      t.id === id ? { ...t, completed: !t.completed } : t
+    ));
+  };
+
+  const handleDeleteTask = (id: string) => {
+    setTasks(tasks.filter(t => t.id !== id));
+  };
+
+  const handleEditTask = (id: string, newText: string) => {
+    setTasks(tasks.map(t => 
+      t.id === id ? { ...t, text: newText } : t
+    ));
+  };
+
+  // --- Plan Management Functions ---
+
   const handleSavePlan = () => {
-    if (!plan || !topic) return;
+    if (!planContent || !topic) return;
+    
+    // Check if updating an existing plan in the list (simple check by topic/content match 
+    // for simplicity, ideally we track currentPlanId)
+    // For now, we always create a new entry or overwrite if saving logic dictates.
+    // Let's treat this as "Save Snapshot".
     
     const newPlan: SavedPlan = {
       id: Date.now().toString(),
       topic: topic,
-      content: plan,
+      content: planContent,
+      tasks: tasks,
       timestamp: Date.now()
     };
     
@@ -115,21 +188,26 @@ export const PlanInterface: React.FC = () => {
 
   const handleLoadPlan = (savedPlan: SavedPlan) => {
     setTopic(savedPlan.topic);
-    setPlan(savedPlan.content);
+    setPlanContent(savedPlan.content);
+    // Backward compatibility if old plans didn't have tasks
+    setTasks(savedPlan.tasks || parseTasksFromMarkdown(savedPlan.content));
     setShowSavedList(false);
   };
 
   const handleExportICal = () => {
-    if (!plan) return;
+    if (!planContent) return;
     
-    // Create a simple iCal event
     const now = new Date();
     const startDate = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    // Default to 3 day duration
     const endDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
     
-    // Escape newlines for iCal format
-    const description = plan.replace(/\n/g, '\\n').substring(0, 7000); // Truncate if too long to prevent issues
+    // Combine Main content + Tasks for description
+    let description = planContent + "\n\n--- Checklist ---\n";
+    tasks.forEach(t => {
+      description += `[${t.completed ? 'X' : ' '}] ${t.text}\n`;
+    });
+
+    const descriptionEscaped = description.replace(/\n/g, '\\n').substring(0, 7000);
 
     const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -140,7 +218,7 @@ DTSTAMP:${startDate}
 DTSTART:${startDate}
 DTEND:${endDate}
 SUMMARY:Trip to ${topic}
-DESCRIPTION:${description}
+DESCRIPTION:${descriptionEscaped}
 END:VEVENT
 END:VCALENDAR`;
 
@@ -155,9 +233,8 @@ END:VCALENDAR`;
   };
 
   const handleAddToGoogleCalendar = () => {
-    if (!plan) return;
-    // URL limit is around 2000 chars for some browsers, safely truncate
-    const details = encodeURIComponent(plan.substring(0, 1500) + "\n\n... (Plan truncated, see app for full details)");
+    if (!planContent) return;
+    const details = encodeURIComponent(planContent.substring(0, 1000) + "...");
     const title = encodeURIComponent(`Trip Plan: ${topic}`);
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}`;
     window.open(url, '_blank');
@@ -165,7 +242,6 @@ END:VCALENDAR`;
 
   const handleAddToMaps = () => {
     if (!topic) return;
-    // Opens a search for the location to easily save places
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(topic)}`;
     window.open(url, '_blank');
   };
@@ -178,7 +254,7 @@ END:VCALENDAR`;
             <div className="flex items-center gap-3">
                <div className="relative group cursor-pointer hover:scale-105 transition-transform">
                  <img 
-                   src="/pad-thai.png" 
+                   src="/pad-thai.svg" 
                    alt="Pad Thai" 
                    className="w-14 h-14 object-contain drop-shadow-md"
                  />
@@ -279,39 +355,104 @@ END:VCALENDAR`;
           </div>
         ) : (
           <>
-            {plan && (
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 animate-fade-in mb-20">
-                {/* Action Bar */}
-                <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
-                  <button 
-                    onClick={handleSavePlan}
-                    className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-                  >
-                    <span className="material-icons text-sm mr-1">save</span> Save
-                  </button>
-                  <button 
-                    onClick={handleExportICal}
-                    className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-                  >
-                    <span className="material-icons text-sm mr-1">event</span> iCal
-                  </button>
-                  <button 
-                    onClick={handleAddToGoogleCalendar}
-                    className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-                  >
-                    <span className="material-icons text-sm mr-1">calendar_today</span> G-Cal
-                  </button>
-                  <button 
-                    onClick={handleAddToMaps}
-                    className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-                  >
-                    <span className="material-icons text-sm mr-1">place</span> Maps
-                  </button>
+            {planContent && (
+              <div className="mb-20 space-y-6">
+                
+                {/* 1. Main Content Card */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 animate-fade-in">
+                  <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
+                    <button 
+                      onClick={handleSavePlan}
+                      className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                    >
+                      <span className="material-icons text-sm mr-1">save</span> Save
+                    </button>
+                    <button 
+                      onClick={handleExportICal}
+                      className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                    >
+                      <span className="material-icons text-sm mr-1">event</span> iCal
+                    </button>
+                    <button 
+                      onClick={handleAddToGoogleCalendar}
+                      className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                    >
+                      <span className="material-icons text-sm mr-1">calendar_today</span> G-Cal
+                    </button>
+                    <button 
+                      onClick={handleAddToMaps}
+                      className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+                    >
+                      <span className="material-icons text-sm mr-1">place</span> Maps
+                    </button>
+                  </div>
+
+                  <div className="prose dark:prose-invert max-w-none text-sm sm:text-base">
+                    <ReactMarkdown>{planContent}</ReactMarkdown>
+                  </div>
                 </div>
 
-                <div className="prose dark:prose-invert max-w-none text-sm sm:text-base">
-                  <ReactMarkdown>{plan}</ReactMarkdown>
+                {/* 2. Interactive Task List Card */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                    <span className="material-icons mr-2 text-primary">check_circle</span>
+                    Action Items
+                  </h3>
+                  
+                  <div className="space-y-2 mb-4">
+                    {tasks.map(task => (
+                      <div key={task.id} className="flex items-start group">
+                        <button 
+                          onClick={() => handleToggleTask(task.id)}
+                          className={`mt-1 mr-3 flex-shrink-0 transition-colors ${task.completed ? 'text-green-500' : 'text-gray-300 dark:text-gray-600 hover:text-primary'}`}
+                        >
+                          <span className="material-icons">
+                            {task.completed ? 'check_box' : 'check_box_outline_blank'}
+                          </span>
+                        </button>
+                        
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={task.text}
+                            onChange={(e) => handleEditTask(task.id, e.target.value)}
+                            className={`w-full bg-transparent border-none p-0 focus:ring-0 text-sm ${
+                              task.completed 
+                                ? 'text-gray-400 line-through' 
+                                : 'text-gray-800 dark:text-gray-200'
+                            }`}
+                          />
+                        </div>
+
+                        <button 
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="ml-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <span className="material-icons text-lg">close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+                    <input
+                      type="text"
+                      value={newTaskText}
+                      onChange={(e) => setNewTaskText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
+                      placeholder="Add a new task..."
+                      className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-l-lg py-2 px-3 text-sm focus:ring-primary focus:border-primary"
+                    />
+                    <button
+                      onClick={handleAddTask}
+                      disabled={!newTaskText.trim()}
+                      className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-r-lg disabled:opacity-50 transition-colors"
+                    >
+                      <span className="material-icons text-sm">add</span>
+                    </button>
+                  </div>
                 </div>
+
               </div>
             )}
             
