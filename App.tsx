@@ -105,7 +105,7 @@ function App() {
         {/* Header */}
         <header className="flex items-center justify-between p-4 bg-white/90 dark:bg-background-dark/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-800 z-20 absolute top-0 w-full">
           <div className="text-2xl font-bold flex items-center gap-2">
-             <img src="/Somsri-thai-guide.png" alt="Logo" className="w-8 h-8 rounded-full bg-white/50 border border-gray-200 dark:border-gray-700" />
+             <img src="/Somsri_SVG.svg" alt="Logo" className="w-8 h-8 rounded-full bg-white/50 border border-gray-200 dark:border-gray-700" />
              <div className="flex items-center">
                <span className="text-thai-red mr-0.5">Thai</span>
                <span className="text-primary">Guide</span>

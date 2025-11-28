@@ -15,6 +15,18 @@ export interface GroundingSource {
   uri: string;
 }
 
+export interface GroundingPlace {
+  title: string;
+  uri: string;
+  placeId?: string;
+}
+
+export interface PlanResponse {
+  text: string;
+  places: GroundingPlace[];
+  destination: string;
+}
+
 export enum Tab {
   CHAT = 'chat',
   PLAN = 'plan',

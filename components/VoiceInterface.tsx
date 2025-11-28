@@ -223,7 +223,7 @@ Speak clearly, enthusiastically, and with a warm, inviting tone.` }]},
         
         <div className={`z-10 w-32 h-32 rounded-full overflow-hidden border-4 ${isConnected ? 'border-primary' : 'border-gray-300 dark:border-gray-600'} shadow-xl bg-white relative`}>
           <img 
-            src="/Somsri-thai-guide.png" 
+            src="/Somsri_SVG.svg" 
             alt="Somsri" 
             className="w-full h-full object-cover p-1"
           />

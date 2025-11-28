@@ -1,6 +1,7 @@
+
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { blobToBase64 } from './audioUtils';
-import { Coordinates, GroundingSource } from '../types';
+import { Coordinates, GroundingSource, PlanResponse, GroundingPlace } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -92,17 +93,68 @@ export const sendMessage = async (
   }
 };
 
-export const generatePlan = async (prompt: string): Promise<string> => {
+export const generatePlan = async (prompt: string): Promise<PlanResponse> => {
   try {
+    // Enhanced prompt to force specific formatting for the parser
+    const enhancedPrompt = `${prompt}
+    
+    IMPORTANT FORMATTING INSTRUCTIONS:
+    Structure your response as a series of specific itinerary sections.
+    
+    1. Start each major time block or activity with a line starting with "> " and an emoji. Example: "> 🕒 09:00 AM - Grand Palace Tour"
+    2. Follow with a brief paragraph description.
+    3. Then, list specific details using bullet points with bold keys EXACTLY like this:
+       * **The Plan:** [Specific action]
+       * **The Vibe:** [Atmosphere description]
+       * **Somsri's Tip:** [Your personal advice]
+       * **Review:** [A short simulated review quote]
+       * **Location:** [Exact Name of the Place for Maps]
+    
+    End the entire plan with a line: "---DESTINATION: [City/Region Name]---"
+    
+    Use the Google Maps tool to verify location names.
+    `;
+
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
+      model: 'gemini-2.5-flash',
+      contents: enhancedPrompt,
       config: {
-        systemInstruction: "You are Somsri, an expert Thai travel planner. Create detailed, step-by-step itineraries. Write in a warm, welcoming tone like a local host. Format nicely with Markdown.",
-        thinkingConfig: { thinkingBudget: 16000 },
+        systemInstruction: "You are Somsri, an expert Thai travel planner. Create detailed, visual, and structured itineraries. You MUST use the formatting requested ( > Headers, * **Key:** Value).",
+        tools: [{ googleMaps: {} }],
       }
     });
-    return response.text || "Could not generate plan.";
+
+    const text = response.text || "Could not generate plan.";
+    
+    // Parse Destination
+    let destination = "";
+    const destMatch = text.match(/---DESTINATION:\s*(.*?)---/);
+    let cleanText = text;
+    if (destMatch) {
+        destination = destMatch[1].trim();
+        cleanText = text.replace(destMatch[0], '').trim();
+    }
+
+    // Parse Grounding Metadata for Places
+    const places: GroundingPlace[] = [];
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+        chunks.forEach((chunk: any) => {
+            if (chunk.maps?.title && chunk.maps?.uri) {
+                places.push({
+                    title: chunk.maps.title,
+                    uri: chunk.maps.uri,
+                    placeId: chunk.maps.placeId
+                });
+            }
+        });
+    }
+
+    return {
+        text: cleanText,
+        places: places,
+        destination: destination
+    };
   } catch (error) {
     console.error("Plan error:", error);
     throw error;

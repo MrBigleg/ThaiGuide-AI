@@ -188,7 +188,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
               <img
                 alt="Somsri avatar"
                 className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-md"
-                src="/Somsri-thai-guide.png"
+                src="/Somsri_SVG.svg"
               />
               <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></span>
             </div>
@@ -204,7 +204,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
                     <img
                       alt="Somsri avatar"
                       className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
-                      src="/Somsri-thai-guide.png"
+                      src="/Somsri_SVG.svg"
                     />
                  </div>
                )}
