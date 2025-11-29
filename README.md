@@ -158,7 +158,6 @@ For deployment concepts and Cloud Run integration, see [DOCS/Utilize the Streaml
 
 ## Support & Documentation
 
-- **Developer Guide:** [CLAUDE.md](CLAUDE.md)
 - **Competition Rules:** [DOCS/Competition Rules.md](DOCS/Competition%20Rules.md)
 - **Kaggle Competition:** [https://www.kaggle.com/competitions/agents-intensive-capstone-project/](https://www.kaggle.com/competitions/agents-intensive-capstone-project/)
 - **Gemini API Docs:** [https://ai.google.dev/docs](https://ai.google.dev/docs)
@@ -166,3 +165,4 @@ For deployment concepts and Cloud Run integration, see [DOCS/Utilize the Streaml
 ---
 
 Built with ❤️ for the Kaggle Agents Intensive Capstone Project
+
