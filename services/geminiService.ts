@@ -95,9 +95,8 @@ export const sendMessage = async (
 
 export const generatePlan = async (prompt: string): Promise<PlanResponse> => {
   try {
-    // Enhanced prompt to force specific formatting for the parser
-    const enhancedPrompt = `${prompt}
-    
+    // Enhanced prompt to force specific formatting for the parser and guard against injection
+    const enhancedPrompt = `
     IMPORTANT FORMATTING INSTRUCTIONS:
     Structure your response as a series of specific itinerary sections.
     
@@ -113,6 +112,11 @@ export const generatePlan = async (prompt: string): Promise<PlanResponse> => {
     End the entire plan with a line: "---DESTINATION: [City/Region Name]---"
     
     Use the Google Maps tool to verify location names.
+
+    USER REQUEST:
+    """
+    ${prompt}
+    """
     `;
 
     const response = await ai.models.generateContent({
@@ -215,3 +219,21 @@ export const generateSpeech = async (text: string): Promise<ArrayBuffer> => {
     throw error;
   }
 };
+
+export const summarizeConversation = async (transcript: string): Promise<string> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Summarize the following travel conversation into a concise, actionable note (max 30 words) that I can stick on my planning board. Focus on destinations, food, or tips mentioned.
+      
+      Transcript:
+      """
+      ${transcript}
+      """`,
+    });
+    return response.text || "";
+  } catch (error) {
+    console.error("Summary error", error);
+    return "Call summary unavailable.";
+  }
+}

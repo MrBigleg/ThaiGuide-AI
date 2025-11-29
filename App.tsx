@@ -4,7 +4,7 @@ import { Navigation } from './components/Navigation';
 import { ChatInterface } from './components/ChatInterface';
 import { PlanInterface } from './components/PlanInterface';
 import { VoiceInterface } from './components/VoiceInterface';
-import { Tab, Coordinates, Theme } from './types';
+import { Tab, Coordinates, Theme, GroundingPlace } from './types';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.CHAT);
@@ -17,6 +17,21 @@ function App() {
     }
     return 'system';
   });
+  
+  // Shared state for Suggested Places (Sources)
+  const [suggestedPlaces, setSuggestedPlaces] = useState<GroundingPlace[]>([]);
+
+  const handleAddPlace = (place: GroundingPlace) => {
+    setSuggestedPlaces(prev => {
+      // Prevent duplicates based on URI
+      if (prev.some(p => p.uri === place.uri)) return prev;
+      return [...prev, place];
+    });
+  };
+
+  const handleRemovePlace = (placeUri: string) => {
+    setSuggestedPlaces(prev => prev.filter(p => p.uri !== placeUri));
+  };
 
   // Handle Geolocation
   useEffect(() => {
@@ -83,13 +98,32 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case Tab.CHAT:
-        return <ChatInterface location={location} />;
+        return (
+          <ChatInterface 
+            location={location} 
+            suggestedPlaces={suggestedPlaces}
+            onAddPlace={handleAddPlace}
+            onRemovePlace={handleRemovePlace}
+          />
+        );
       case Tab.PLAN:
-        return <PlanInterface />;
+        return (
+          <PlanInterface 
+            suggestedPlaces={suggestedPlaces}
+            setSuggestedPlaces={setSuggestedPlaces}
+          />
+        );
       case Tab.VOICE:
         return <VoiceInterface />;
       default:
-        return <ChatInterface location={location} />;
+        return (
+          <ChatInterface 
+            location={location}
+            suggestedPlaces={suggestedPlaces}
+            onAddPlace={handleAddPlace}
+            onRemovePlace={handleRemovePlace}
+          />
+        );
     }
   };
 
@@ -105,7 +139,7 @@ function App() {
         {/* Header */}
         <header className="flex items-center justify-between p-4 bg-white/90 dark:bg-background-dark/90 backdrop-blur-sm border-b border-gray-100 dark:border-gray-800 z-20 absolute top-0 w-full">
           <div className="text-2xl font-bold flex items-center gap-2">
-             <img src="/Somsri_SVG.svg" alt="Logo" className="w-8 h-8 rounded-full bg-white/50 border border-gray-200 dark:border-gray-700" />
+             <img src="/Somsri-thai-guide.png" alt="Logo" className="w-8 h-8 rounded-full bg-white/50 border border-gray-200 dark:border-gray-700" />
              <div className="flex items-center">
                <span className="text-thai-red mr-0.5">Thai</span>
                <span className="text-primary">Guide</span>

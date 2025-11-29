@@ -27,6 +27,24 @@ interface SavedPlan {
   destination?: string;
 }
 
+interface VoiceSticky {
+  id: string;
+  text: string;
+  date: string;
+}
+
+interface PlanInterfaceProps {
+  suggestedPlaces: GroundingPlace[];
+  setSuggestedPlaces: React.Dispatch<React.SetStateAction<GroundingPlace[]>>;
+}
+
+const safeOpen = (url: string) => {
+  const newWindow = window.open(url, '_blank');
+  if (newWindow) {
+    newWindow.opener = null;
+  }
+};
+
 const parseMarkdownToItems = (markdown: string): PlanItem[] => {
   if (!markdown) return [];
   
@@ -243,14 +261,14 @@ const PlanItemRow: React.FC<{
   );
 };
 
-export const PlanInterface: React.FC = () => {
+export const PlanInterface: React.FC<PlanInterfaceProps> = ({ suggestedPlaces, setSuggestedPlaces }) => {
   const [topic, setTopic] = useState('');
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [destination, setDestination] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
   const [showSavedList, setShowSavedList] = useState(false);
-  const [foundPlaces, setFoundPlaces] = useState<GroundingPlace[]>([]);
+  const [stickies, setStickies] = useState<VoiceSticky[]>([]);
 
   // Voice input state
   const [isRecording, setIsRecording] = useState(false);
@@ -268,6 +286,12 @@ export const PlanInterface: React.FC = () => {
         }));
         setSavedPlans(parsed);
       }
+      
+      // Load Voice Stickies
+      const storedStickies = localStorage.getItem('thai_guide_stickies');
+      if (storedStickies) {
+        setStickies(JSON.parse(storedStickies));
+      }
     } catch (e) {
       console.error("Failed to load plans", e);
     }
@@ -276,6 +300,11 @@ export const PlanInterface: React.FC = () => {
   const saveToLocalStorage = (plans: SavedPlan[]) => {
     localStorage.setItem('thai_guide_saved_plans', JSON.stringify(plans));
     setSavedPlans(plans);
+  };
+
+  const updateStickies = (newStickies: VoiceSticky[]) => {
+    localStorage.setItem('thai_guide_stickies', JSON.stringify(newStickies));
+    setStickies(newStickies);
   };
 
   const startRecording = async () => {
@@ -325,7 +354,13 @@ export const PlanInterface: React.FC = () => {
       const items = parseMarkdownToItems(result.text);
       setPlanItems(items);
       setDestination(result.destination || "");
-      setFoundPlaces(result.places || []);
+      // Append new places to shared suggested places, avoiding duplicates
+      if (result.places && result.places.length > 0) {
+          setSuggestedPlaces(prev => {
+              const newPlaces = result.places.filter(np => !prev.some(op => op.uri === np.uri));
+              return [...prev, ...newPlaces];
+          });
+      }
     } catch (e) {
       setPlanItems([{ id: 'error', type: 'paragraph', content: "Sorry, I couldn't generate the plan right now.", isCompleted: false }]);
     } finally {
@@ -342,7 +377,7 @@ export const PlanInterface: React.FC = () => {
       items: planItems,
       timestamp: Date.now(),
       destination: destination,
-      places: foundPlaces
+      places: suggestedPlaces // Save currently suggested places with the plan
     };
     
     const updatedPlans = [newPlan, ...savedPlans];
@@ -362,7 +397,7 @@ export const PlanInterface: React.FC = () => {
     setTopic(savedPlan.topic);
     setPlanItems(savedPlan.items || parseMarkdownToItems((savedPlan as any).content));
     setDestination(savedPlan.destination || "");
-    setFoundPlaces(savedPlan.places || []);
+    setSuggestedPlaces(savedPlan.places || []);
     setShowSavedList(false);
   };
 
@@ -389,6 +424,41 @@ export const PlanInterface: React.FC = () => {
       isCompleted: false
     };
     setPlanItems([...planItems, newItem]);
+  };
+
+  // Sticky Management
+  const handleAddStickyToPlan = (sticky: VoiceSticky) => {
+    const newItem: PlanItem = {
+        id: `sticky-${Date.now()}`,
+        type: 'task',
+        content: sticky.text,
+        isCompleted: false
+    };
+    setPlanItems([...planItems, newItem]);
+  };
+
+  const handleDeleteSticky = (id: string) => {
+      if(window.confirm("Remove this voice note?")) {
+          const next = stickies.filter(s => s.id !== id);
+          updateStickies(next);
+      }
+  };
+
+  // Place Management
+  const handleAddPlaceToPlan = (place: GroundingPlace) => {
+    const newItem: PlanItem = {
+      id: `place-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      type: 'key-value',
+      content: `* **Location:** ${place.title}`,
+      key: 'Location',
+      value: place.title,
+      isCompleted: false
+    };
+    setPlanItems(prev => [...prev, newItem]);
+  };
+
+  const handleRemovePlace = (place: GroundingPlace) => {
+    setSuggestedPlaces(prev => prev.filter(p => p.uri !== place.uri));
   };
 
   const handleExportICal = () => {
@@ -430,31 +500,29 @@ END:VCALENDAR`;
     const details = encodeURIComponent(planString.substring(0, 1500) + "\n\n... (Plan truncated, see app for full details)");
     const title = encodeURIComponent(`Trip Plan: ${topic}`);
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}`;
-    window.open(url, '_blank');
+    safeOpen(url);
   };
 
   const handleAddToMaps = () => {
-    if (!topic) return;
+    if (!topic && suggestedPlaces.length === 0) return;
     
+    let url = '';
     // Construct a route if we have multiple places
-    if (foundPlaces.length > 1) {
-        const origin = encodeURIComponent(foundPlaces[0].title);
-        const destinationPlace = encodeURIComponent(foundPlaces[foundPlaces.length - 1].title);
-        const waypoints = foundPlaces.slice(1, -1).map(p => encodeURIComponent(p.title)).join('|');
-        const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destinationPlace}&waypoints=${waypoints}`;
-        window.open(url, '_blank');
-    } else if (foundPlaces.length === 1) {
-        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(foundPlaces[0].title)}`;
-        window.open(url, '_blank');
+    if (suggestedPlaces.length > 1) {
+        const origin = encodeURIComponent(suggestedPlaces[0].title);
+        const destinationPlace = encodeURIComponent(suggestedPlaces[suggestedPlaces.length - 1].title);
+        const waypoints = suggestedPlaces.slice(1, -1).map(p => encodeURIComponent(p.title)).join('|');
+        url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destinationPlace}&waypoints=${waypoints}`;
+    } else if (suggestedPlaces.length === 1) {
+        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(suggestedPlaces[0].title)}`;
     } else if (destination) {
         // Fallback to destination search
-        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
-        window.open(url, '_blank');
+        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination)}`;
     } else {
         // Fallback to topic
-        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(topic)}`;
-        window.open(url, '_blank');
+        url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(topic)}`;
     }
+    safeOpen(url);
   };
 
   return (
@@ -465,7 +533,7 @@ END:VCALENDAR`;
             <div className="flex items-center gap-3">
                <div className="relative group cursor-pointer hover:scale-105 transition-transform">
                  <img 
-                   src="/pad-thai.svg" 
+                   src="/pad-thai.png" 
                    alt="Pad Thai" 
                    className="w-14 h-14 object-contain drop-shadow-md"
                  />
@@ -534,6 +602,82 @@ END:VCALENDAR`;
           )}
         </div>
 
+        {/* Voice Stickies Section */}
+        {!showSavedList && stickies.length > 0 && (
+            <div className="mb-6 overflow-x-auto">
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 flex items-center">
+                    <span className="material-icons text-sm mr-1">mic</span> Voice Notes
+                </h3>
+                <div className="flex gap-3 pb-2">
+                    {stickies.map(sticky => (
+                        <div key={sticky.id} className="min-w-[200px] w-[200px] bg-yellow-100 dark:bg-yellow-900/40 p-3 rounded-lg border border-yellow-200 dark:border-yellow-700 shadow-sm relative group flex flex-col justify-between">
+                            <p className="text-xs text-gray-800 dark:text-gray-200 font-handwriting mb-2 line-clamp-4 leading-relaxed">
+                                "{sticky.text}"
+                            </p>
+                            <div className="flex justify-between items-center mt-2 border-t border-yellow-200 dark:border-yellow-800 pt-2">
+                                <span className="text-[10px] text-gray-500">{new Date(sticky.date).toLocaleDateString()}</span>
+                                <div className="flex gap-1">
+                                    <button 
+                                        onClick={() => handleAddStickyToPlan(sticky)} 
+                                        className="bg-white dark:bg-gray-800 p-1.5 rounded-full hover:bg-yellow-50 dark:hover:bg-gray-700 text-green-600 transition-colors"
+                                        title="Add to Plan"
+                                    >
+                                        <span className="material-icons text-sm">add</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDeleteSticky(sticky.id)}
+                                        className="bg-white dark:bg-gray-800 p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-gray-700 text-red-500 transition-colors"
+                                        title="Discard"
+                                    >
+                                        <span className="material-icons text-sm">close</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* Suggested Places Section - Shared State */}
+        {!showSavedList && suggestedPlaces.length > 0 && (
+             <div className="mb-6 overflow-x-auto">
+                <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 flex items-center">
+                    <span className="material-icons text-sm mr-1">place</span> Suggested Places
+                </h3>
+                <div className="flex gap-3 pb-2">
+                    {suggestedPlaces.map((place, idx) => (
+                        <div key={idx} className="min-w-[200px] w-[200px] bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative group flex flex-col justify-between">
+                            <div className="mb-2">
+                                <a href={place.uri} target="_blank" rel="noopener noreferrer" className="font-bold text-sm text-primary hover:underline line-clamp-2" title={place.title}>
+                                    {place.title}
+                                </a>
+                            </div>
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span className="text-[10px] text-gray-400">Source</span>
+                                <div className="flex gap-1">
+                                    <button 
+                                        onClick={() => handleAddPlaceToPlan(place)} 
+                                        className="bg-green-50 dark:bg-green-900/20 p-1.5 rounded-full hover:bg-green-100 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 transition-colors"
+                                        title="Add to Itinerary"
+                                    >
+                                        <span className="material-icons text-sm">add</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleRemovePlace(place)}
+                                        className="bg-red-50 dark:bg-red-900/20 p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 transition-colors"
+                                        title="Remove Source"
+                                    >
+                                        <span className="material-icons text-sm">close</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {showSavedList ? (
           <div className="space-y-3">
              {savedPlans.length === 0 ? (
@@ -593,7 +737,7 @@ END:VCALENDAR`;
                     className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition"
                   >
                     <span className="material-icons text-sm mr-1">place</span>
-                    {foundPlaces.length > 1 ? 'View Route' : 'Maps'}
+                    {suggestedPlaces.length > 1 ? 'View Route' : 'Maps'}
                   </button>
                 </div>
 

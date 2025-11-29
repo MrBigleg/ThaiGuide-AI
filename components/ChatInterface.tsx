@@ -1,15 +1,19 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Message, Coordinates } from '../types';
+import { Message, Coordinates, GroundingPlace } from '../types';
 import { sendMessage, transcribeAudio, generateSpeech } from '../services/geminiService';
 
 interface ChatInterfaceProps {
   location?: Coordinates;
+  suggestedPlaces: GroundingPlace[];
+  onAddPlace: (place: GroundingPlace) => void;
+  onRemovePlace: (uri: string) => void;
 }
 
 const MapPreview: React.FC<{ location: Coordinates }> = ({ location }) => {
   const mapRef = useRef<HTMLDivElement>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
   
   useEffect(() => {
     if (!mapRef.current || !(window as any).L) return;
@@ -34,12 +38,20 @@ const MapPreview: React.FC<{ location: Coordinates }> = ({ location }) => {
         attributionControl: false
     });
     
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    
+    tileLayer.on('load', () => {
+        setIsLoaded(true);
+    });
+
+    tileLayer.addTo(map);
     L.marker([location.latitude, location.longitude], { icon }).addTo(map);
     
     // Force a resize calculation after render to prevent grey tiles
     setTimeout(() => {
         map.invalidateSize();
+        // Fallback to ensure loader is removed if tiles are cached or load fast
+        setTimeout(() => setIsLoaded(true), 500);
     }, 100);
 
     return () => {
@@ -47,10 +59,24 @@ const MapPreview: React.FC<{ location: Coordinates }> = ({ location }) => {
     }
   }, [location]);
 
-  return <div ref={mapRef} className="h-48 w-full rounded-lg mt-3 z-0 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm" />;
+  return (
+    <div className="relative h-48 w-full rounded-lg mt-3 overflow-hidden shadow-sm border border-gray-200 dark:border-gray-700">
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 animate-pulse flex items-center justify-center z-10">
+           <span className="material-icons text-gray-300 dark:text-gray-600 text-4xl">map</span>
+        </div>
+      )}
+      <div ref={mapRef} className={`h-full w-full z-0 ${isLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`} />
+    </div>
+  );
 };
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  location, 
+  suggestedPlaces, 
+  onAddPlace, 
+  onRemovePlace 
+}) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -188,7 +214,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
               <img
                 alt="Somsri avatar"
                 className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-md"
-                src="/Somsri_SVG.svg"
+                src="/Somsri-thai-guide.png"
               />
               <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full"></span>
             </div>
@@ -204,7 +230,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
                     <img
                       alt="Somsri avatar"
                       className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
-                      src="/Somsri_SVG.svg"
+                      src="/Somsri-thai-guide.png"
                     />
                  </div>
                )}
@@ -216,7 +242,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
                 }`}
               >
                 <div className="prose dark:prose-invert prose-sm max-w-none">
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
+                  <ReactMarkdown components={{
+                    a: (props) => (
+                        <a {...props} target="_blank" rel="noopener noreferrer" />
+                    )
+                  }}>{msg.text}</ReactMarkdown>
                 </div>
 
                 {msg.location && (
@@ -227,17 +257,28 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ location }) => {
                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs">
                       <p className="font-semibold mb-1 opacity-70">Sources:</p>
                       <div className="flex flex-wrap gap-2">
-                        {msg.groundingSources.map((source, idx) => (
-                          <a 
-                            key={idx} 
-                            href={source.uri} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-primary hover:underline truncate max-w-[200px]"
-                          >
-                            {source.title}
-                          </a>
-                        ))}
+                        {msg.groundingSources.map((source, idx) => {
+                          const isAdded = suggestedPlaces.some(p => p.uri === source.uri);
+                          return (
+                            <div key={idx} className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-full border border-gray-200 dark:border-gray-600 transition-all hover:bg-gray-200 dark:hover:bg-gray-600">
+                              <a 
+                                href={source.uri} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="px-3 py-1 text-primary hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                              >
+                                {source.title}
+                              </a>
+                              <button
+                                onClick={() => isAdded ? onRemovePlace(source.uri) : onAddPlace(source)}
+                                className={`pr-2 pl-1 py-1 flex items-center justify-center ${isAdded ? 'text-green-500' : 'text-gray-400 hover:text-primary'}`}
+                                title={isAdded ? "Remove from Plan" : "Add to Plan"}
+                              >
+                                <span className="material-icons text-sm">{isAdded ? 'check_circle' : 'add_circle_outline'}</span>
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                    </div>
                 )}
