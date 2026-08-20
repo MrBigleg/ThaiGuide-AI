@@ -4,6 +4,10 @@
 
 # ThaiGuide AI - Kaggle Agents Intensive Capstone Project
 
+ThaiGuide AI is built by Craig Burton and the team at [CTB Digital Marketing](https://ctbmarketing.com), the consultancy behind [Rank-in-Maps](https://www.rank-in-maps.com/) (Google Business Profile audits and local visibility intelligence). 🙏📍🛺
+
+---
+
 **Competition:** [Agents Intensive - Capstone Project](https://www.kaggle.com/competitions/agents-intensive-capstone-project/)
 **Sponsor:** Google LLC
 **License:** CC-BY-SA 4.0
